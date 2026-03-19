@@ -44,7 +44,7 @@ st.set_page_config(
 # ---------------------------------------------------------------------------
 DATA_DIR = Path(__file__).resolve().parent / "data"
 
-REGION_NAMES = {"W": "West", "X": "East", "Y": "South", "Z": "Midwest"}
+REGION_NAMES = {"W": "East", "X": "South", "Y": "Midwest", "Z": "West"}
 
 MODEL_COLORS = {
     "Comparative Metrics": "#2563eb",
@@ -132,16 +132,19 @@ def simulate_all(_db, _seeds_df, _slots_df, actuals_csv: str | None):
 # Bracket rendering (HTML/CSS)
 # ---------------------------------------------------------------------------
 
-def _team_cell(name: str, seed, score, is_winner: bool, is_actual: bool) -> str:
+def _team_cell(name: str, seed, score, is_winner: bool, is_actual: bool,
+               win_pct: str = "") -> str:
     seed_int = int(seed) if pd.notna(seed) else "?"
     score_str = f"{score:.0f}" if pd.notna(score) else ""
     cls = "team-winner" if is_winner else "team-loser"
     if is_actual:
         cls += " actual"
+    pct_html = f'<span class="win-pct">{win_pct}</span>' if win_pct else ""
     return (
         f'<div class="team-row {cls}">'
         f'<span class="seed">{seed_int}</span>'
         f'<span class="team-name">{name}</span>'
+        f'{pct_html}'
         f'<span class="score">{score_str}</span>'
         f'</div>'
     )
@@ -159,8 +162,22 @@ def _game_card(row: pd.Series) -> str:
         s_score = row.get("strong_pred_score")
         w_score = row.get("weak_pred_score")
 
-    top = _team_cell(row["strong_team"] or "TBD", row.get("strong_seed"), s_score, s_winner, is_actual)
-    bot = _team_cell(row["weak_team"] or "TBD", row.get("weak_seed"), w_score, w_winner, is_actual)
+    # Win probability labels (only for predictions, not actuals)
+    s_pct = w_pct = ""
+    if not is_actual:
+        conf = row.get("confidence")
+        if pd.notna(conf) and conf is not None:
+            conf = float(conf)
+            winner_id = row.get("winner_id")
+            if winner_id == row.get("strong_team_id"):
+                s_pct = f"{conf * 100:.0f}%"
+                w_pct = f"{(1 - conf) * 100:.0f}%"
+            elif winner_id == row.get("weak_team_id"):
+                w_pct = f"{conf * 100:.0f}%"
+                s_pct = f"{(1 - conf) * 100:.0f}%"
+
+    top = _team_cell(row["strong_team"] or "TBD", row.get("strong_seed"), s_score, s_winner, is_actual, s_pct)
+    bot = _team_cell(row["weak_team"] or "TBD", row.get("weak_seed"), w_score, w_winner, is_actual, w_pct)
 
     badge = ""
     if is_actual:
@@ -311,6 +328,14 @@ BRACKET_CSS = """
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.win-pct {
+    font-size: 9px;
+    color: #94a3b8;
+    min-width: 28px;
+    text-align: right;
+    padding-right: 3px;
+}
+.team-winner .win-pct { color: #86efac; }
 .score {
     font-weight: 600;
     font-size: 12px;
@@ -609,6 +634,12 @@ def round_detail_section(df: pd.DataFrame, db: TeamDB):
 
                 winner = row["winner"] or "TBD"
 
+                conf = row.get("confidence")
+                if pd.notna(conf) and conf is not None:
+                    odds_str = f"{float(conf) * 100:.0f}%"
+                else:
+                    odds_str = "—"
+
                 upset_html = ""
                 if pd.notna(row.get("strong_seed")) and pd.notna(row.get("weak_seed")):
                     if row.get("winner_id") == row.get("weak_team_id") and row["weak_seed"] > row["strong_seed"]:
@@ -637,6 +668,7 @@ def round_detail_section(df: pd.DataFrame, db: TeamDB):
                     <td>({w_seed}) {row["weak_team"] or "TBD"}</td>
                     <td>{s_score}–{w_score}</td>
                     <td><strong>{winner}</strong>{upset_html}</td>
+                    <td>{odds_str}</td>
                     {actual_html}
                 </tr>"""
 
@@ -652,7 +684,7 @@ def round_detail_section(df: pd.DataFrame, db: TeamDB):
                 <thead>
                     <tr>
                         <th>Higher Seed</th><th>Lower Seed</th>
-                        <th>Pred. Score</th><th>Predicted Winner</th>
+                        <th>Pred. Score</th><th>Predicted Winner</th><th>Win %</th>
                         {actual_cols}
                     </tr>
                 </thead>
@@ -811,6 +843,8 @@ def upset_tracker(df: pd.DataFrame):
             continue
         if row.get("winner_id") == row.get("weak_team_id") and w_seed > s_seed:
             gap = int(w_seed - s_seed)
+            conf = row.get("confidence")
+            odds_str = f"{float(conf) * 100:.0f}%" if pd.notna(conf) and conf is not None else "—"
             upsets.append({
                 "Round": row["round_label"],
                 "Upset Winner": f"({int(w_seed)}) {row['weak_team']}",
@@ -818,6 +852,7 @@ def upset_tracker(df: pd.DataFrame):
                 "Seed Gap": gap,
                 "Score": f"{row['weak_pred_score']:.0f}–{row['strong_pred_score']:.0f}"
                          if pd.notna(row.get("weak_pred_score")) else "—",
+                "Win %": odds_str,
             })
 
     if upsets:
@@ -848,10 +883,13 @@ def path_to_title(df: pd.DataFrame, db: TeamDB, champion_id):
                 else:
                     score = f"{row['weak_pred_score']:.0f}–{row['strong_pred_score']:.0f}"
 
+            conf = row.get("confidence")
+            odds_str = f"{float(conf) * 100:.0f}%" if pd.notna(conf) and conf is not None else "—"
             path_games.append({
                 "Round": row["round_label"],
                 "Opponent": f"({opp_seed}) {opponent}",
                 "Score": score,
+                "Win %": odds_str,
                 "Status": "✓ ACTUAL" if row.get("is_actual") else "Predicted",
             })
 

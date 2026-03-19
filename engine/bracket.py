@@ -37,6 +37,7 @@ class BracketSlot:
     pred_winner_id: Optional[int] = None
     strong_pred_score: Optional[float] = None
     weak_pred_score: Optional[float] = None
+    confidence: Optional[float] = None
     is_actual: bool = False
     actual_winner_id: Optional[int] = None
     actual_strong_score: Optional[float] = None
@@ -135,6 +136,7 @@ class Bracket:
                     slot.weak_pred_score = pred["team_a_score"]
 
                 slot.pred_winner_id = pred["winner_id"]
+                slot.confidence = pred.get("confidence")
                 slot.winner_team_id = pred["winner_id"]
 
     def inject_actuals(self, results_df: pd.DataFrame) -> None:
@@ -182,6 +184,7 @@ class Bracket:
                 slot.winner_team_id = None
                 slot.strong_pred_score = None
                 slot.weak_pred_score = None
+                slot.confidence = None
                 if slot.round_num > 0:
                     slot.strong_team_id = None
                     slot.weak_team_id = None
@@ -216,6 +219,7 @@ class Bracket:
                     "weak_pred_score": slot.weak_pred_score,
                     "pred_winner": pred_winner_name,
                     "pred_winner_id": slot.pred_winner_id,
+                    "confidence": slot.confidence,
                     "winner": winner_name,
                     "winner_id": slot.winner_team_id,
                     "is_actual": slot.is_actual,
