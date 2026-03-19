@@ -12,7 +12,7 @@ DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
 
 class AdvancedMetricsModel(PredictionModel):
-    name = "Advanced Metrics"
+    name = "Comparative Metrics"
 
     def __init__(self, models_dir: Path | str | None = None):
         models_dir = Path(models_dir) if models_dir else DATA_DIR / "models"

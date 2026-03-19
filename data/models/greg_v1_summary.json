@@ -1,0 +1,115 @@
+{
+  "features": [
+    "con_adj_oe_diff",
+    "con_adj_de_diff",
+    "adj_em_diff",
+    "seed_diff",
+    "wab_diff",
+    "b_adj_em",
+    "conf_winpct_diff",
+    "sos_diff",
+    "a_adj_em",
+    "qual_games_diff",
+    "adj_o_diff",
+    "qual_barthag_diff",
+    "is_late_round",
+    "seed_product",
+    "qual_o_diff",
+    "coach_tourn_wins_diff",
+    "adj_d_diff",
+    "ncsos_diff",
+    "a_adj_o",
+    "seed_sum",
+    "consos_diff",
+    "b_adj_o",
+    "qual_d_diff",
+    "b_barthag",
+    "coach_appearances_diff",
+    "elite_sos_diff",
+    "a_adj_d",
+    "coach_final_fours_diff"
+  ],
+  "n_features": 28,
+  "best_model_type": "Ridge Regression",
+  "best_params": {
+    "alpha": 0.5
+  },
+  "winner_label": "Tuned Ridge",
+  "holdout_win_acc": 0.8028846153846154,
+  "holdout_margin_mae": 7.308289753236403,
+  "holdout_total_mae": 13.785592275461765,
+  "baseline_win_acc": 0.7644230769230769,
+  "baseline_mae": 8.405141378209912,
+  "all_results": [
+    {
+      "Model": "HGB Expanded",
+      "Acc": 0.7644230769230769,
+      "Acc_2024_25": 0.8071428571428572,
+      "MAE": 7.831929245116468,
+      "R2": 0.4811978418288305
+    },
+    {
+      "Model": "HGB + Recency",
+      "Acc": 0.7692307692307693,
+      "Acc_2024_25": 0.8071428571428572,
+      "MAE": 7.910150744303811,
+      "R2": 0.4649066044296968
+    },
+    {
+      "Model": "HGB Recent-Only (2019+)",
+      "Acc": 0.7403846153846154,
+      "Acc_2024_25": 0.7571428571428571,
+      "MAE": 8.896415555925405,
+      "R2": 0.34154326094148457
+    },
+    {
+      "Model": "Random Forest + Recency",
+      "Acc": 0.7836538461538461,
+      "Acc_2024_25": 0.8142857142857143,
+      "MAE": 7.980220920189938,
+      "R2": 0.45323184102059166
+    },
+    {
+      "Model": "XGBoost + Recency",
+      "Acc": 0.7596153846153846,
+      "Acc_2024_25": 0.8071428571428572,
+      "MAE": 7.8613924368356285,
+      "R2": 0.4832002745761501
+    },
+    {
+      "Model": "Ridge Regression",
+      "Acc": 0.7980769230769231,
+      "Acc_2024_25": 0.8285714285714286,
+      "MAE": 7.4177421105675725,
+      "R2": 0.5396360198411354
+    },
+    {
+      "Model": "Stacking (HGB+XGB\u2192Ridge)",
+      "Acc": 0.7596153846153846,
+      "Acc_2024_25": 0.8071428571428572,
+      "MAE": 7.856768526360231,
+      "R2": 0.4839236656349223
+    },
+    {
+      "Model": "Comparative Metrics (baseline)",
+      "Acc": 0.7644230769230769,
+      "Acc_2024_25": 0.8,
+      "MAE": 8.405141378209912,
+      "R2": 0.4017857468440976
+    }
+  ],
+  "enrich_map_reverse": {
+    "sos": "sos",
+    "ncsos": "ncsos",
+    "consos": "consos",
+    "elite_sos": "elite SOS",
+    "qual_o": "Qual O",
+    "qual_d": "Qual D",
+    "qual_barthag": "Qual Barthag",
+    "qual_games": "Qual Games",
+    "con_adj_oe": "Con Adj OE",
+    "con_adj_de": "Con Adj DE",
+    "conf_winpct": "Conf Win%",
+    "bart_rank": "bart_rank"
+  }
+}

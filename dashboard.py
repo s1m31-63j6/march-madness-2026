@@ -47,10 +47,11 @@ DATA_DIR = Path(__file__).resolve().parent / "data"
 REGION_NAMES = {"W": "West", "X": "East", "Y": "South", "Z": "Midwest"}
 
 MODEL_COLORS = {
-    "Advanced Metrics": "#2563eb",
+    "Comparative Metrics": "#2563eb",
     "Animal Kingdom": "#dc2626",
     "Vegas Odds": "#059669",
     "Seeding Only": "#7c3aed",
+    "Greg_v1": "#f59e0b",
 }
 
 # ---------------------------------------------------------------------------
@@ -71,7 +72,12 @@ def build_models(db: TeamDB):
     models["Seeding Only"] = SeedingModel(db)
     try:
         from engine.models.advanced_metrics import AdvancedMetricsModel
-        models["Advanced Metrics"] = AdvancedMetricsModel(str(DATA_DIR / "models"))
+        models["Comparative Metrics"] = AdvancedMetricsModel(str(DATA_DIR / "models"))
+    except Exception:
+        pass
+    try:
+        from engine.models.greg_v1 import GregV1Model
+        models["Greg_v1"] = GregV1Model(str(DATA_DIR / "models"))
     except Exception:
         pass
     has_api_key = bool(os.environ.get("ANTHROPIC_API_KEY"))
