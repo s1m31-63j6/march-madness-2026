@@ -47,7 +47,7 @@ def load_actuals(
 
     Expected CSV columns
     --------------------
-    - ``round``  : human name (e.g. ``R64``, ``Sweet 16``, ``Final Four``)
+    - ``round``  : human name (e.g. ``First Four``, ``R64``, ``Sweet 16``)
     - ``winner`` : team name  (e.g. ``Duke``, ``st johns``, ``Michigan St``)
     - ``winner_score`` : (optional) winning team's final score
     - ``loser_score``  : (optional) losing team's final score
@@ -84,6 +84,7 @@ def load_actuals(
         # and propagate winners so the next round's slots have teams.
         if prev_round is not None and round_num > prev_round and rows:
             bracket.inject_actuals(pd.DataFrame(rows))
+            rows = []
             for s in bracket.slots.values():
                 if s.round_num == round_num:
                     bracket._resolve_teams(s)
@@ -120,6 +121,9 @@ def load_actuals(
             entry["loser_score"] = float(row["loser_score"])
 
         rows.append(entry)
+
+    if rows:
+        bracket.inject_actuals(pd.DataFrame(rows))
 
     if errors:
         print(f"\n{'!'*60}")

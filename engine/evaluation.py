@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 
@@ -14,6 +16,85 @@ except ImportError:
     _HAS_VIZ = False
 
 from engine.bracket import ROUND_LABELS
+
+
+# ------------------------------------------------------------------
+# Tournament results merge (post-tournament evaluation)
+# ------------------------------------------------------------------
+
+
+def truth_dataframe_from_tournament_csv(
+    path: str | Path,
+    seeds_df: pd.DataFrame,
+    slots_df: pd.DataFrame,
+    db,  # TeamDB
+) -> pd.DataFrame:
+    """
+    Build a bracket dataframe where actual_* columns reflect the full tournament
+    CSV (same format as ``load_actuals``). Used to merge ``result_*`` onto model
+    predictions without changing those predictions.
+    """
+    from engine.bracket import Bracket
+    from engine.actuals import load_actuals
+
+    p = Path(path)
+    if not p.exists():
+        return pd.DataFrame()
+
+    b = Bracket(seeds_df, slots_df, season=2026)
+    load_actuals(p, b, db)
+    return b.to_dataframe(db)
+
+
+def merge_tournament_results_into_bracket_dfs(
+    bracket_dfs: dict[str, pd.DataFrame],
+    truth_df: pd.DataFrame,
+) -> dict[str, pd.DataFrame]:
+    """
+    Add ``result_*`` columns (tournament truth) per slot_id so the UI can show
+    predictions vs actuals side by side. Does not modify pred_* columns.
+    """
+    if truth_df.empty or "slot_id" not in truth_df.columns:
+        return bracket_dfs
+
+    rename_map = {
+        "actual_winner_id": "result_winner_id",
+        "actual_winner": "result_winner",
+        "actual_strong_score": "result_strong_score",
+        "actual_weak_score": "result_weak_score",
+    }
+    cols = ["slot_id"] + [c for c in rename_map if c in truth_df.columns]
+    t = truth_df[cols].rename(columns=rename_map)
+
+    out: dict[str, pd.DataFrame] = {}
+    for name, df in bracket_dfs.items():
+        drop = [c for c in rename_map.values() if c in df.columns]
+        base = df.drop(columns=drop, errors="ignore")
+        out[name] = base.merge(t, on="slot_id", how="left")
+    return out
+
+
+def games_graded_count(df: pd.DataFrame) -> int:
+    """Rows where we can compare pred_winner_id to tournament result."""
+    if "result_winner_id" in df.columns:
+        m = df["result_winner_id"].notna() & df["pred_winner_id"].notna()
+        return int(m.sum())
+    m = df["is_actual"] & df["pred_winner_id"].notna() & df["actual_winner_id"].notna()
+    return int(m.sum())
+
+
+def overall_pick_accuracy(df: pd.DataFrame) -> float:
+    """Fraction of graded games where the model picked the real winner."""
+    if "result_winner_id" in df.columns:
+        mask = df["result_winner_id"].notna() & df["pred_winner_id"].notna()
+        truth = "result_winner_id"
+    else:
+        mask = df["is_actual"] & df["pred_winner_id"].notna() & df["actual_winner_id"].notna()
+        truth = "actual_winner_id"
+    subset = df.loc[mask]
+    if subset.empty:
+        return float("nan")
+    return float((subset["pred_winner_id"] == subset[truth]).mean())
 
 
 # ------------------------------------------------------------------
@@ -38,13 +119,7 @@ def accuracy_table(
     """
     model_names = list(bracket_dfs.keys())
 
-    actual_rounds = sorted(
-        {
-            r
-            for df in bracket_dfs.values()
-            for r in df[df["is_actual"]]["round_num"].unique()
-        }
-    )
+    actual_rounds = sorted(_rounds_with_known_results(bracket_dfs))
 
     if not actual_rounds:
         return pd.DataFrame(columns=["window"] + model_names)
@@ -60,9 +135,9 @@ def accuracy_table(
         just_row: dict = {"window": just_label}
 
         for name, df in bracket_dfs.items():
-            actual = df[df["is_actual"]].copy()
-            cum_slice = actual[actual["round_num"].isin(actual_rounds[: i + 1])]
-            just_slice = actual[actual["round_num"] == rnd]
+            graded = _graded_games(df)
+            cum_slice = graded[graded["round_num"].isin(actual_rounds[: i + 1])]
+            just_slice = graded[graded["round_num"] == rnd]
 
             cum_row[name] = _win_accuracy(cum_slice)
             just_row[name] = _win_accuracy(just_slice)
@@ -80,13 +155,7 @@ def spread_accuracy_table(
     """MAE of predicted spread by round."""
     model_names = list(bracket_dfs.keys())
 
-    actual_rounds = sorted(
-        {
-            r
-            for df in bracket_dfs.values()
-            for r in df[df["is_actual"]]["round_num"].unique()
-        }
-    )
+    actual_rounds = sorted(_rounds_with_known_results(bracket_dfs))
 
     if not actual_rounds:
         return pd.DataFrame(columns=["window"] + model_names)
@@ -95,7 +164,8 @@ def spread_accuracy_table(
     for rnd in actual_rounds:
         row: dict = {"window": ROUND_LABELS.get(rnd, f"R{rnd}")}
         for name, df in bracket_dfs.items():
-            slc = df[(df["is_actual"]) & (df["round_num"] == rnd)]
+            slc = _graded_games(df)
+            slc = slc[slc["round_num"] == rnd]
             row[name] = _spread_mae(slc)
         rows.append(row)
 
@@ -147,15 +217,36 @@ def plot_accuracy_heatmap(
 # ------------------------------------------------------------------
 
 
+def _graded_games(df: pd.DataFrame) -> pd.DataFrame:
+    """Rows where pred can be compared to tournament truth (or legacy is_actual)."""
+    if "result_winner_id" in df.columns:
+        return df[df["result_winner_id"].notna() & df["pred_winner_id"].notna()].copy()
+    return df[df["is_actual"] & df["pred_winner_id"].notna() & df["actual_winner_id"].notna()].copy()
+
+
+def _rounds_with_known_results(bracket_dfs: dict[str, pd.DataFrame]) -> set[int]:
+    rounds: set[int] = set()
+    for df in bracket_dfs.values():
+        g = _graded_games(df)
+        if not g.empty:
+            rounds.update(g["round_num"].unique().tolist())
+    return rounds
+
+
 def _win_accuracy(df: pd.DataFrame) -> float:
-    """Fraction of games where pred_winner_id == actual_winner_id."""
+    """Fraction of games where pred_winner_id matches tournament result."""
     if df.empty:
         return np.nan
-    mask = df["pred_winner_id"].notna() & df["actual_winner_id"].notna()
-    subset = df[mask]
+    if "result_winner_id" in df.columns:
+        mask = df["result_winner_id"].notna() & df["pred_winner_id"].notna()
+        truth_col = "result_winner_id"
+    else:
+        mask = df["pred_winner_id"].notna() & df["actual_winner_id"].notna()
+        truth_col = "actual_winner_id"
+    subset = df.loc[mask]
     if subset.empty:
         return np.nan
-    correct = (subset["pred_winner_id"] == subset["actual_winner_id"]).sum()
+    correct = (subset["pred_winner_id"] == subset[truth_col]).sum()
     return correct / len(subset)
 
 
@@ -167,8 +258,12 @@ def _spread_mae(df: pd.DataFrame) -> float:
     for _, row in df.iterrows():
         pred_s = row.get("strong_pred_score")
         pred_w = row.get("weak_pred_score")
-        act_s = row.get("actual_strong_score")
-        act_w = row.get("actual_weak_score")
+        if "result_strong_score" in row.index and pd.notna(row.get("result_strong_score")):
+            act_s = row.get("result_strong_score")
+            act_w = row.get("result_weak_score")
+        else:
+            act_s = row.get("actual_strong_score")
+            act_w = row.get("actual_weak_score")
         if all(pd.notna(v) for v in [pred_s, pred_w, act_s, act_w]):
             errors.append(abs((pred_s - pred_w) - (act_s - act_w)))
     return float(np.mean(errors)) if errors else np.nan

@@ -25,4 +25,5 @@ class PredictionModel(ABC):
         team_b_id: int,
         db: TeamDB,
         round_num: int = 1,
+        slot_id: str | None = None,
     ) -> Prediction: ...

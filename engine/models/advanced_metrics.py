@@ -16,9 +16,25 @@ class AdvancedMetricsModel(PredictionModel):
 
     def __init__(self, models_dir: Path | str | None = None):
         models_dir = Path(models_dir) if models_dir else DATA_DIR / "models"
-        self._margin_model = joblib.load(models_dir / "score_margin_model.pkl")
-        self._total_model = joblib.load(models_dir / "total_points_model.pkl")
-        self._feature_cols: list[str] = joblib.load(models_dir / "feature_cols.pkl")
+        self._models_dir = models_dir
+        self._margin_model = None
+        self._total_model = None
+        self._feature_cols: list[str] | None = None
+
+    def _load(self) -> None:
+        if self._margin_model is not None and self._total_model is not None and self._feature_cols is not None:
+            return
+        try:
+            self._margin_model = joblib.load(self._models_dir / "score_margin_model.pkl")
+            self._total_model = joblib.load(self._models_dir / "total_points_model.pkl")
+            self._feature_cols = joblib.load(self._models_dir / "feature_cols.pkl")
+        except Exception as exc:
+            raise RuntimeError(
+                "Failed to load Comparative Metrics artifacts from "
+                f"{self._models_dir}. Re-run `march_madness.ipynb` to re-export "
+                "`score_margin_model.pkl`, `total_points_model.pkl`, and `feature_cols.pkl` "
+                "in a compatible environment."
+            ) from exc
 
     def predict(
         self,
@@ -26,7 +42,10 @@ class AdvancedMetricsModel(PredictionModel):
         team_b_id: int,
         db: TeamDB,
         round_num: int = 1,
+        slot_id: str | None = None,
     ) -> Prediction:
+        self._load()
+        assert self._feature_cols is not None
         features = db.compute_matchup_features(team_a_id, team_b_id, round_num=round_num)
 
         vec = np.array(

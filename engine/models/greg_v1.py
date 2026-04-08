@@ -57,10 +57,24 @@ class GregV1Model(PredictionModel):
     name = "Greg_v1"
 
     def __init__(self, models_dir: Path | str | None = None):
-        models_dir = Path(models_dir) if models_dir else DATA_DIR / "models"
-        self._margin_model = joblib.load(models_dir / "greg_v1_margin_model.pkl")
-        self._total_model = joblib.load(models_dir / "greg_v1_total_model.pkl")
-        self._feature_cols: list[str] = joblib.load(models_dir / "greg_v1_feature_cols.pkl")
+        self._models_dir = Path(models_dir) if models_dir else DATA_DIR / "models"
+        self._margin_model = None
+        self._total_model = None
+        self._feature_cols: list[str] | None = None
+
+    def _load(self) -> None:
+        if self._margin_model is not None and self._total_model is not None and self._feature_cols is not None:
+            return
+        try:
+            self._margin_model = joblib.load(self._models_dir / "greg_v1_margin_model.pkl")
+            self._total_model = joblib.load(self._models_dir / "greg_v1_total_model.pkl")
+            self._feature_cols = joblib.load(self._models_dir / "greg_v1_feature_cols.pkl")
+        except Exception as exc:
+            raise RuntimeError(
+                "Failed to load Greg_v1 artifacts from "
+                f"{self._models_dir}. Re-run `model_lab.ipynb` to re-export "
+                "the `greg_v1_*.pkl` files in a compatible environment."
+            ) from exc
 
     def predict(
         self,
@@ -68,7 +82,10 @@ class GregV1Model(PredictionModel):
         team_b_id: int,
         db: TeamDB,
         round_num: int = 1,
+        slot_id: str | None = None,
     ) -> Prediction:
+        self._load()
+        assert self._feature_cols is not None
         features = self._compute_features(team_a_id, team_b_id, db, round_num)
         vec = np.array([[features.get(c, 0.0) for c in self._feature_cols]])
 
