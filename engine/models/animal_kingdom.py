@@ -55,6 +55,7 @@ class AnimalKingdomModel(PredictionModel):
         team_b_id: int,
         db: TeamDB,
         round_num: int = 1,
+        slot_id: str | None = None,
     ) -> Prediction:
         name_a = db.get_team_name(team_a_id)
         name_b = db.get_team_name(team_b_id)

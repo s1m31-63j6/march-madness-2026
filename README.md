@@ -112,6 +112,7 @@ Every model implements the exact same interface. You give it two teams and it gi
 | **Animal Kingdom** | Asks Claude AI "if these two mascots fought, who would win?" and uses the fight scores (50-100) as predictions. Pure entertainment value. | `ANTHROPIC_API_KEY` env var |
 | **Vegas Odds** | Uses real sportsbook betting lines (spread + over/under) to derive predicted scores. When real lines are not available for a matchup, Claude estimates what Vegas would set the line at -- and those predictions are **flagged as AI-estimated** in the output. | `data/vegas_lines.csv` for real lines, `ANTHROPIC_API_KEY` for AI fallback |
 | **Seeding Only** | The simplest model: the higher-seeded team always wins. Ties broken by regular-season win percentage. Scores based on historical averages for each seed matchup. | Nothing (always works) |
+| **Probabilities (Sampled / Tiered Threshold / MC Consensus)** | Uses a trained classification model to estimate win probabilities for each matchup, then applies one of three bracket strategies: sampled draw, deterministic thresholds, or per-game Monte Carlo majority. Scores are generated using the existing regression models so the bracket UI can still show predicted scores. | `data/models/prob_model.pkl` + `data/models/prob_feature_cols.pkl` (classifier), plus the existing regression `.pkl` files |
 
 ### Layer 3 -- Evaluation
 
@@ -207,6 +208,18 @@ march_madness/
 │   └── kaggle/                 │  Raw Kaggle competition data (teams,
 │                               │  seeds, game results, rankings, etc.)
 ```
+
+### New model artifacts (probability-based models)
+
+To enable the three probability-based models in `dashboard.py`, export these from `march_madness.ipynb` into `data/models/`:
+
+- **Classifier (required for win probabilities)**:
+  - `prob_model.pkl`
+  - `prob_feature_cols.pkl`
+- **Scores (already used by Comparative Metrics; also used to generate scores for the probability models)**:
+  - `score_margin_model.pkl`
+  - `total_points_model.pkl`
+  - `feature_cols.pkl`
 
 ---
 

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from sklearn.linear_model import LinearRegression
 
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
@@ -43,6 +44,19 @@ class TeamDB:
             if matchup_path.exists()
             else pd.DataFrame()
         )
+        # Same residual as notebook `make_2026_features`: seed_disagreement = adj_em_diff - E[adj_em|seed_diff]
+        self._lr_seed_em: LinearRegression | None = None
+        if (
+            not self._matchups.empty
+            and "adj_em_diff" in self._matchups.columns
+            and "seed_diff" in self._matchups.columns
+        ):
+            df = self._matchups.dropna(subset=["adj_em_diff", "seed_diff"])
+            if len(df) >= 10:
+                self._lr_seed_em = LinearRegression().fit(
+                    df[["seed_diff"]].fillna(0).to_numpy(),
+                    df["adj_em_diff"].fillna(0).to_numpy(),
+                )
 
     # ------------------------------------------------------------------
     # Seed helpers
@@ -187,6 +201,23 @@ class TeamDB:
             a_val = self._safe_float(a.get(m))
             b_val = self._safe_float(b.get(m))
             features[f"{m}_diff"] = a_val - b_val
+
+        # Required by data/models/prob_model.pkl (must match notebook `make_2026_features`)
+        features["ast_rate_diff"] = self._safe_float(a.get("ast_rate")) - self._safe_float(
+            b.get("ast_rate")
+        )
+        adj_em_d = features.get("adj_em_diff", np.nan)
+        if (
+            self._lr_seed_em is not None
+            and not np.isnan(a_seed)
+            and not np.isnan(b_seed)
+            and not np.isnan(adj_em_d)
+        ):
+            sd = float(a_seed - b_seed)
+            pred_line = float(self._lr_seed_em.predict(np.array([[sd]]))[0])
+            features["seed_disagreement"] = float(adj_em_d - pred_line)
+        else:
+            features["seed_disagreement"] = 0.0
 
         return features
 

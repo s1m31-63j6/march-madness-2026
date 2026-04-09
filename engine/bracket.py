@@ -126,7 +126,13 @@ class Bracket:
                 team_a_id, team_b_id = self._order_by_seed(
                     slot.strong_team_id, slot.weak_team_id, db
                 )
-                pred = model.predict(team_a_id, team_b_id, db, round_num=slot.round_num)
+                pred = model.predict(
+                    team_a_id,
+                    team_b_id,
+                    db,
+                    round_num=slot.round_num,
+                    slot_id=slot.slot_id,
+                )
 
                 if team_a_id == slot.strong_team_id:
                     slot.strong_pred_score = pred["team_a_score"]
@@ -176,6 +182,9 @@ class Bracket:
             default=-1,
         )
         self.reset_from_round(max_actual_round + 1)
+        # reset_from_round clears R1 strong/weak; refill direct seed lookups (W01, Z06, …)
+        # so simulate() can resolve upstream slots (e.g. Z11 → R1Z6) and run predictions.
+        self._populate_known_teams()
 
     def reset_from_round(self, from_round: int) -> None:
         """Clear predictions for round ``from_round`` and all later rounds."""

@@ -10,3 +10,7 @@ plotly
 anthropic
 python-dotenv
 xgboost
+statsmodels
+tqdm
+rapidfuzz
+requests
