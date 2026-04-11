@@ -197,7 +197,7 @@ class _ProbabilityBackbone:
 class SampledProbabilityModel(PredictionModel):
     """Option A — sample each game winner from model probability."""
 
-    name = "Probabilities (Sampled)"
+    name = "Lean GB (Sampled)"
 
     def __init__(self, models_dir: Path | str | None = None, random_seed: int = 12345):
         self._core = _ProbabilityBackbone(models_dir=models_dir)
@@ -235,7 +235,7 @@ class SampledProbabilityModel(PredictionModel):
 class ThresholdProbabilityModel(PredictionModel):
     """Option B — deterministic threshold strategy."""
 
-    name = "Probabilities (Tiered Threshold)"
+    name = "Lean GB (Tiered Threshold)"
 
     def __init__(
         self,
@@ -299,7 +299,7 @@ class MonteCarloConsensusModel(PredictionModel):
     while using the CSV only to choose ``winner_id``.
     """
 
-    name = "Probabilities (MC Consensus)"
+    name = "Lean GB (MC Consensus)"
 
     def __init__(
         self,

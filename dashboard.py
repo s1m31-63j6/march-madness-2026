@@ -94,17 +94,17 @@ def build_models(db: TeamDB):
             ThresholdProbabilityModel,
             MonteCarloConsensusModel,
         )
-        models["Probabilities (Sampled)"] = SampledProbabilityModel(
+        models["Lean GB (Sampled)"] = SampledProbabilityModel(
             str(DATA_DIR / "models"),
             random_seed=12345,
         )
-        models["Probabilities (Tiered Threshold)"] = ThresholdProbabilityModel(
+        models["Lean GB (Tiered Threshold)"] = ThresholdProbabilityModel(
             str(DATA_DIR / "models"),
         )
         # MC Consensus is fast only when the notebook has exported
         # `data/cache/mc_slot_consensus_2026.csv`. If missing, the model will be skipped
         # with a clear message instead of freezing the dashboard on startup.
-        models["Probabilities (MC Consensus)"] = MonteCarloConsensusModel(
+        models["Lean GB (MC Consensus)"] = MonteCarloConsensusModel(
             str(DATA_DIR / "models"),
             n_sims=10_000,
             random_seed=12345,
@@ -304,8 +304,10 @@ def render_region_bracket(df: pd.DataFrame, region: str, direction: str = "ltr")
         row = _series_for_slot(df, region, sid)
         card = _game_card(row) if row is not None else '<div class="game-card game-card-missing"></div>'
         gr = i + 1
+        pair = "top" if i % 2 == 0 else "bottom"
         cells.append(
-            f'<div class="grid-bracket-slot" style="grid-column:{r64_c};grid-row:{gr}">{card}</div>'
+            f'<div class="grid-bracket-slot" data-round="1" data-pair="{pair}" '
+            f'style="grid-column:{r64_c};grid-row:{gr}">{card}</div>'
         )
 
     for j, suf in enumerate(_R2_VISUAL_SUFFIXES):
@@ -313,8 +315,10 @@ def render_region_bracket(df: pd.DataFrame, region: str, direction: str = "ltr")
         row = _series_for_slot(df, region, sid)
         card = _game_card(row) if row is not None else '<div class="game-card game-card-missing"></div>'
         r0 = j * 2 + 1
+        pair = "top" if j % 2 == 0 else "bottom"
         cells.append(
-            f'<div class="grid-bracket-slot" style="grid-column:{r32_c};grid-row:{r0}/span 2">{card}</div>'
+            f'<div class="grid-bracket-slot" data-round="2" data-pair="{pair}" '
+            f'style="grid-column:{r32_c};grid-row:{r0}/span 2">{card}</div>'
         )
 
     for j, suf in enumerate(_R3_VISUAL_SUFFIXES):
@@ -322,8 +326,10 @@ def render_region_bracket(df: pd.DataFrame, region: str, direction: str = "ltr")
         row = _series_for_slot(df, region, sid)
         card = _game_card(row) if row is not None else '<div class="game-card game-card-missing"></div>'
         r0 = j * 4 + 1
+        pair = "top" if j % 2 == 0 else "bottom"
         cells.append(
-            f'<div class="grid-bracket-slot" style="grid-column:{s16_c};grid-row:{r0}/span 4">{card}</div>'
+            f'<div class="grid-bracket-slot" data-round="3" data-pair="{pair}" '
+            f'style="grid-column:{s16_c};grid-row:{r0}/span 4">{card}</div>'
         )
 
     for suf in _R4_VISUAL_SUFFIXES:
@@ -331,7 +337,8 @@ def render_region_bracket(df: pd.DataFrame, region: str, direction: str = "ltr")
         row = _series_for_slot(df, region, sid)
         card = _game_card(row) if row is not None else '<div class="game-card game-card-missing"></div>'
         cells.append(
-            f'<div class="grid-bracket-slot" style="grid-column:{e8_c};grid-row:1/span 8">{card}</div>'
+            f'<div class="grid-bracket-slot" data-round="4" data-pair="top" '
+            f'style="grid-column:{e8_c};grid-row:1/span 8">{card}</div>'
         )
 
     grid = "".join(cells)
@@ -366,22 +373,42 @@ def render_final_four(df: pd.DataFrame) -> str:
 
 BRACKET_CSS = """
 <style>
+/* ── Outer bracket layout ── */
+.bracket-scroll-wrap {
+    overflow-x: auto;
+    padding: 4px 0;
+}
+.bracket-outer-grid {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 0;
+}
+.bracket-center-col {
+    display: flex;
+    align-items: center;
+}
+.region-spacer {
+    height: 16px;
+}
+
+/* ── Bracket container ── */
 .bracket-container {
     display: flex;
     align-items: flex-start;
     justify-content: center;
     gap: 0;
-    overflow-x: auto;
     padding: 12px 0;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 .region-bracket {
     display: block;
 }
+
+/* ── Column labels ── */
 .bracket-col-labels {
     display: grid;
-    grid-template-columns: repeat(4, minmax(156px, 1fr));
-    gap: 0 8px;
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+    gap: 0 20px;
     margin-bottom: 6px;
 }
 .bracket-col-labels .lbl {
@@ -392,23 +419,84 @@ BRACKET_CSS = """
     letter-spacing: 0.05em;
     color: #94a3b8;
 }
+
+/* ── Region grid ── */
 .region-bracket-grid {
     display: grid;
-    grid-template-columns: repeat(4, minmax(156px, 1fr));
-    grid-template-rows: repeat(8, minmax(56px, auto));
-    column-gap: 8px;
+    grid-template-columns: repeat(4, minmax(150px, 1fr));
+    grid-template-rows: repeat(8, minmax(52px, auto));
+    column-gap: 20px;
     row-gap: 0;
     align-items: stretch;
 }
 .grid-bracket-slot {
     align-self: center;
     min-width: 0;
+    position: relative;
 }
+
+/* ── Connector lines (LTR regions) ── */
+/* Outgoing horizontal stub → right edge of card toward next round */
+.region-bracket:not(.dir-rtl) .grid-bracket-slot[data-round="1"]::after,
+.region-bracket:not(.dir-rtl) .grid-bracket-slot[data-round="2"]::after,
+.region-bracket:not(.dir-rtl) .grid-bracket-slot[data-round="3"]::after {
+    content: '';
+    position: absolute;
+    right: -20px;
+    top: 50%;
+    width: 10px;
+    border-top: 2px solid #475569;
+}
+/* Incoming vertical bracket on receiving side (R32, S16, E8) */
+.region-bracket:not(.dir-rtl) .grid-bracket-slot[data-round="2"]::before,
+.region-bracket:not(.dir-rtl) .grid-bracket-slot[data-round="3"]::before,
+.region-bracket:not(.dir-rtl) .grid-bracket-slot[data-round="4"]::before {
+    content: '';
+    position: absolute;
+    left: -20px;
+    top: 25%;
+    height: 50%;
+    width: 10px;
+    border-left: 2px solid #475569;
+    border-top: 2px solid #475569;
+    border-bottom: 2px solid #475569;
+}
+
+/* ── Connector lines (RTL regions — mirrored) ── */
+.dir-rtl .grid-bracket-slot[data-round="1"]::after,
+.dir-rtl .grid-bracket-slot[data-round="2"]::after,
+.dir-rtl .grid-bracket-slot[data-round="3"]::after {
+    content: '';
+    position: absolute;
+    left: -20px;
+    right: auto;
+    top: 50%;
+    width: 10px;
+    border-top: 2px solid #475569;
+}
+.dir-rtl .grid-bracket-slot[data-round="2"]::before,
+.dir-rtl .grid-bracket-slot[data-round="3"]::before,
+.dir-rtl .grid-bracket-slot[data-round="4"]::before {
+    content: '';
+    position: absolute;
+    right: -20px;
+    left: auto;
+    top: 25%;
+    height: 50%;
+    width: 10px;
+    border-right: 2px solid #475569;
+    border-top: 2px solid #475569;
+    border-bottom: 2px solid #475569;
+}
+
+/* ── Game card missing ── */
 .game-card-missing {
     min-height: 52px;
     opacity: 0.35;
     border-style: dashed;
 }
+
+/* ── Final Four block ── */
 .final-four-block {
     display: flex;
     gap: 0;
@@ -419,7 +507,7 @@ BRACKET_CSS = """
     display: flex;
     flex-direction: column;
     justify-content: space-around;
-    min-width: 170px;
+    min-width: 160px;
     padding: 0 3px;
 }
 .round-label {
@@ -431,6 +519,8 @@ BRACKET_CSS = """
     color: #94a3b8;
     padding: 4px 0 8px 0;
 }
+
+/* ── Game card ── */
 .game-card {
     background: #1e293b;
     border-radius: 6px;
@@ -454,6 +544,8 @@ BRACKET_CSS = """
     color: #22c55e;
     letter-spacing: 0.05em;
 }
+
+/* ── Team rows ── */
 .team-row {
     display: flex;
     align-items: center;
@@ -506,13 +598,13 @@ BRACKET_CSS = """
     min-width: 24px;
     text-align: right;
 }
-.round-1 .game-card { margin: 2px 0; }
+
+/* ── Round-specific card margins ── */
 .region-bracket-grid .game-card { margin: 2px 0; }
-.round-2 .game-card { margin: 16px 0; }
-.round-3 .game-card { margin: 44px 0; }
-.round-4 .game-card { margin: 100px 0; }
 .round-5 .game-card { margin: 24px 0; }
 .round-6 .game-card { margin: 24px 0; }
+
+/* ── Split cards (predicted + actual) ── */
 .game-card-split {
     padding: 0;
 }
@@ -539,6 +631,8 @@ BRACKET_CSS = """
 .team-row.result-line.team-loser {
     color: #64748b;
 }
+
+/* ── Region header ── */
 .region-header {
     text-align: center;
     font-size: 16px;
@@ -549,7 +643,8 @@ BRACKET_CSS = """
     text-transform: uppercase;
     border-radius: 6px;
 }
-/* Champion banner */
+
+/* ── Champion banner ── */
 .champion-banner {
     text-align: center;
     padding: 24px;
@@ -568,7 +663,8 @@ BRACKET_CSS = """
     color: #94a3b8;
     font-size: 14px;
 }
-/* Stat cards */
+
+/* ── Stat cards ── */
 .stat-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -594,7 +690,8 @@ BRACKET_CSS = """
     letter-spacing: 0.08em;
     margin-top: 4px;
 }
-/* Matchup detail table */
+
+/* ── Matchup detail table ── */
 .matchup-table {
     width: 100%;
     border-collapse: collapse;
@@ -629,7 +726,8 @@ BRACKET_CSS = """
     margin-left: 4px;
     letter-spacing: 0.04em;
 }
-/* First Four */
+
+/* ── First Four ── */
 .first-four-row {
     display: flex;
     gap: 8px;
@@ -638,7 +736,35 @@ BRACKET_CSS = """
     margin: 12px 0;
 }
 .first-four-row .game-card {
-    min-width: 170px;
+    min-width: 160px;
+}
+
+/* ── Responsive: mobile ── */
+@media (max-width: 768px) {
+    .bracket-outer-grid {
+        grid-template-columns: 1fr;
+    }
+    .bracket-center-col {
+        order: 5;
+    }
+    .bracket-region-col:first-child { order: 1; }
+    .bracket-region-col:last-child { order: 3; }
+    .region-spacer { height: 8px; }
+    .final-four-block {
+        flex-direction: column;
+    }
+    /* Hide connector lines on mobile */
+    .grid-bracket-slot::before,
+    .grid-bracket-slot::after {
+        display: none !important;
+    }
+    .bracket-col-labels,
+    .region-bracket-grid {
+        grid-template-columns: repeat(4, minmax(80px, 1fr));
+        column-gap: 4px;
+    }
+    .team-row { padding: 3px 4px; gap: 3px; }
+    .win-pct { display: none; }
 }
 </style>
 """
@@ -810,22 +936,22 @@ def bracket_section(df: pd.DataFrame, model_name: str):
                 f'{REGION_NAMES[code]}</div>')
 
     bracket_body = f"""
-    <div style="overflow-x:auto;">
-        <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:0; min-width:1100px;">
-            <div>
+    <div class="bracket-scroll-wrap">
+        <div class="bracket-outer-grid">
+            <div class="bracket-region-col">
                 {region_hdr("W")}
                 <div class="bracket-container">{left_top}</div>
-                <div style="height:16px;"></div>
+                <div class="region-spacer"></div>
                 {region_hdr("Y")}
                 <div class="bracket-container">{left_bot}</div>
             </div>
-            <div style="display:flex; align-items:center;">
+            <div class="bracket-center-col">
                 <div class="bracket-container">{center}</div>
             </div>
-            <div>
+            <div class="bracket-region-col">
                 {region_hdr("X")}
                 <div class="bracket-container">{right_top}</div>
-                <div style="height:16px;"></div>
+                <div class="region-spacer"></div>
                 {region_hdr("Z")}
                 <div class="bracket-container">{right_bot}</div>
             </div>
