@@ -466,45 +466,77 @@ const hindsightState = { data: null, compareWith: null };
 async function loadHindsight() {
     const h = await API.hindsight();
     hindsightState.data = h;
+    renderCompareSwitcher(h);
+    renderStatsPanel();
+    renderImportanceChart();
+}
+
+function renderStatsPanel() {
+    const h = hindsightState.data;
+    const compare = hindsightState.compareWith;
+
+    let games, win_acc, margin_mae, total_mae, note;
+    if (!compare) {
+        games = h.train_games;
+        win_acc = h.train_win_acc;
+        margin_mae = h.train_margin_mae;
+        total_mae = h.train_total_mae;
+        note = "by construction — this is the fit, not a test";
+    } else {
+        const s = h.comparison_models[compare]?.stats || {};
+        games = s.games;
+        win_acc = s.win_acc;
+        margin_mae = s.margin_mae;
+        total_mae = s.total_mae;
+        note = s.data_note || "";
+    }
+
+    const fmtNum = (v) => (v == null || isNaN(v)) ? "—" : Number(v).toFixed(2);
+    const gamesStr = games == null ? "—" : (Number.isInteger(games) ? games.toLocaleString() : games);
+
+    const rows = [
+        ["Training games", gamesStr, compare ? note : "the 67 tournament games"],
+        ["Win accuracy", fmtPct(win_acc), compare ? "on this model's evaluation set" : "by construction — this is the fit, not a test"],
+        ["Score-margin MAE", fmtNum(margin_mae), "points of spread error"],
+        ["Total-points MAE", fmtNum(total_mae), "points of combined-score error"],
+    ];
 
     const stats = document.getElementById('hindsight-stats');
     stats.innerHTML = '';
-    const cells = [
-        ['Training games', h.train_games, 'the 67 tournament games'],
-        ['Training win accuracy', fmtPct(h.train_win_acc), 'by construction — this is the fit, not a test'],
-        ['Training margin MAE', h.train_margin_mae.toFixed(2), 'points of spread error'],
-        ['Training total MAE', h.train_total_mae.toFixed(2), 'points of combined-score error'],
-    ];
-    cells.forEach(([k, v, sub]) => {
+    rows.forEach(([k, v, sub]) => {
         stats.append(el('div', { class: 'stat-cell' },
             el('div', { class: 'k' }, k),
             el('div', { class: 'v' }, String(v)),
             el('div', { class: 'sub' }, sub),
         ));
     });
-
-    renderCompareSwitcher(h);
-    renderImportanceChart();
 }
 
 function renderCompareSwitcher(h) {
     const root = document.getElementById('compare-switcher');
     root.innerHTML = '';
-    root.append(el('span', { class: 'label' }, 'Overlay:'));
+    root.append(el('span', { class: 'label' }, 'Model:'));
 
     const noneBtn = el('button', {
         class: 'pill' + (hindsightState.compareWith == null ? ' active' : ''),
-        onclick: () => { hindsightState.compareWith = null; renderCompareSwitcher(h); renderImportanceChart(); },
-    }, 'Hindsight only');
+        onclick: () => selectModel(null),
+    }, 'Hindsight (2026)');
     root.append(noneBtn);
 
     const models = Object.keys(h.comparison_models || {});
     models.forEach(m => {
         root.append(el('button', {
             class: 'pill' + (hindsightState.compareWith === m ? ' active' : ''),
-            onclick: () => { hindsightState.compareWith = m; renderCompareSwitcher(h); renderImportanceChart(); },
+            onclick: () => selectModel(m),
         }, m));
     });
+}
+
+function selectModel(m) {
+    hindsightState.compareWith = m;
+    renderCompareSwitcher(hindsightState.data);
+    renderStatsPanel();
+    renderImportanceChart();
 }
 
 function renderNarrative() {
@@ -524,6 +556,16 @@ function renderImportanceChart() {
     const h = hindsightState.data;
     const compare = hindsightState.compareWith;
     const hindLookup = Object.fromEntries(h.importances.map(d => [d.feature, d.importance]));
+
+    const chartHeading = document.getElementById('chart-heading');
+    const chartCaption = document.getElementById('chart-caption');
+    if (!compare) {
+        chartHeading.textContent = 'Feature importances — fitted on 2026 alone';
+        chartCaption.textContent = 'Ranked by gain in the gradient-boosted margin model. Higher = more predictive of the games that were actually played.';
+    } else {
+        chartHeading.textContent = `Feature importances — ${compare} vs Hindsight`;
+        chartCaption.textContent = `Red = what the 2026 tournament actually rewarded. Blue = what ${compare} weighted heading into it. Same feature set (union of each side's top 10).`;
+    }
 
     let features;
     let traces;

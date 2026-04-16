@@ -83,20 +83,19 @@
                     <p class="subhead">The Hindsight model is a gradient-boosted regressor trained directly on this tournament's 67 games. It fits the data almost perfectly by construction — but its feature importances tell us which variables carried the signal <em>this</em> year.</p>
                 </div>
 
+                <div class="compare-switcher" id="compare-switcher" role="tablist"></div>
+
                 <div class="stat-row" id="hindsight-stats"></div>
-
-                <div class="chart-block wide">
-                    <h3>Feature importances — fitted on 2026 alone</h3>
-                    <p class="caption">Ranked by gain in the gradient-boosted margin model. Higher = more predictive of the games that were actually played. Overlay another model to see where its pre-tournament priors diverged from what the season rewarded.</p>
-
-                    <div class="compare-switcher" id="compare-switcher" role="tablist"></div>
-
-                    <div id="hindsight-importances" class="plot"></div>
-                </div>
 
                 <div class="notebox" id="hindsight-narrative">
                     <h4 id="narrative-headline">Reading this honestly</h4>
                     <p id="narrative-body">A model trained on its own test set is a caricature of predictive power. The point isn't the accuracy — it's the <em>shape</em> of the importance chart. Features that rank high here are ones whose pre-tournament values cleanly separated this year's winners from losers. Features that rank low were either noisy, correlated with higher-ranked ones, or genuinely irrelevant to how 2026 played out.</p>
+                </div>
+
+                <div class="chart-block wide" style="margin-top:28px;">
+                    <h3 id="chart-heading">Feature importances — fitted on 2026 alone</h3>
+                    <p class="caption" id="chart-caption">Ranked by gain in the gradient-boosted margin model. Higher = more predictive of the games that were actually played.</p>
+                    <div id="hindsight-importances" class="plot"></div>
                 </div>
             </div>
         </section>
@@ -125,6 +124,7 @@
         <div class="container">
             <p>Greg Lewis · EMBA 693R Advanced ML · Apr 2026</p>
             <p class="meta">Pre-computed predictions served from static JSON. No live API calls at request time.</p>
+            <p class="meta">Models infer against a frozen pre-tournament Barttorvik snapshot (<code>season_2026_pre_tournament.csv</code>), so features never peek at tournament outcomes.</p>
         </div>
     </footer>
 
