@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>March Madness 2026 — The Retrospective</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;0,8..60,700;0,8..60,900;1,8..60,300;1,8..60,400&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/styles.css">
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+</head>
+<body>
+    <header class="masthead">
+        <div class="masthead-inner">
+            <div class="kicker">EMBA 693R · Advanced Machine Learning</div>
+            <h1>The March Madness Retrospective</h1>
+            <p class="dek">Eight prediction models walked into a bracket. Only one of them knew how it ended. Here's how each model fared against the 2026 tournament, round by round — and what the games actually rewarded.</p>
+            <div class="result-strip" id="result-strip"></div>
+        </div>
+    </header>
+
+    <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="retrospective" role="tab">The Retrospective</button>
+        <button class="tab" data-tab="brackets" role="tab">Full Brackets</button>
+        <button class="tab" data-tab="hindsight" role="tab">What Mattered</button>
+        <button class="tab" data-tab="docs" role="tab">Method &amp; Docs</button>
+    </nav>
+
+    <main>
+        <!-- ═════════════════════════ RETROSPECTIVE ═════════════════════════ -->
+        <section class="tab-panel active" id="panel-retrospective">
+            <div class="container">
+                <div class="lede">
+                    <h2>How each model fared</h2>
+                    <p class="subhead">Pre-tournament bracket vs what actually happened, across 67 games.</p>
+                </div>
+
+                <div id="leaderboard" class="leaderboard"></div>
+
+                <div class="two-col">
+                    <div class="chart-block">
+                        <h3>Accuracy, round by round</h3>
+                        <p class="caption">The shape of each model's failure: where Vegas bled out, where Greg_v1 held up.</p>
+                        <div id="round-heatmap" class="plot"></div>
+                    </div>
+                    <div class="chart-block">
+                        <h3>Champion picks</h3>
+                        <p class="caption">Who each model crowned before the tournament tipped off.</p>
+                        <div id="champion-picks"></div>
+                    </div>
+                </div>
+
+                <div class="chart-block wide">
+                    <h3>The upsets that defined the tournament</h3>
+                    <p class="caption">Games won by the higher-numbered seed. The model tags show who had the guts to call it.</p>
+                    <div id="upsets-list"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═════════════════════════ BRACKETS ═════════════════════════ -->
+        <section class="tab-panel" id="panel-brackets">
+            <div class="container">
+                <div class="lede">
+                    <h2>Every model's bracket, side by side with what happened</h2>
+                    <p class="subhead">Switch between models. Green checks = model nailed it. Red X = model whiffed.</p>
+                </div>
+
+                <div class="model-switcher" id="model-switcher"></div>
+
+                <div id="bracket-meta" class="bracket-meta"></div>
+                <div id="bracket-view" class="bracket-view"></div>
+            </div>
+        </section>
+
+        <!-- ═════════════════════════ HINDSIGHT ═════════════════════════ -->
+        <section class="tab-panel" id="panel-hindsight">
+            <div class="container">
+                <div class="lede">
+                    <h2>What actually mattered in 2026</h2>
+                    <p class="subhead">The Hindsight model is a gradient-boosted regressor trained directly on this tournament's 67 games. It fits the data almost perfectly by construction — but its feature importances tell us which variables carried the signal <em>this</em> year.</p>
+                </div>
+
+                <div class="stat-row" id="hindsight-stats"></div>
+
+                <div class="chart-block wide">
+                    <h3>Feature importances — fitted on 2026 alone</h3>
+                    <p class="caption">Ranked by gain in the gradient-boosted margin model. Higher = more predictive of the games that were actually played. Overlay another model to see where its pre-tournament priors diverged from what the season rewarded.</p>
+
+                    <div class="compare-switcher" id="compare-switcher" role="tablist"></div>
+
+                    <div id="hindsight-importances" class="plot"></div>
+                </div>
+
+                <div class="notebox" id="hindsight-narrative">
+                    <h4 id="narrative-headline">Reading this honestly</h4>
+                    <p id="narrative-body">A model trained on its own test set is a caricature of predictive power. The point isn't the accuracy — it's the <em>shape</em> of the importance chart. Features that rank high here are ones whose pre-tournament values cleanly separated this year's winners from losers. Features that rank low were either noisy, correlated with higher-ranked ones, or genuinely irrelevant to how 2026 played out.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ═════════════════════════ DOCS ═════════════════════════ -->
+        <section class="tab-panel" id="panel-docs">
+            <div class="container">
+                <div class="lede">
+                    <h2>Method &amp; documentation</h2>
+                    <p class="subhead">Everything you'd want to know to reproduce this work or extend it.</p>
+                </div>
+
+                <div class="doc-switcher" id="doc-switcher">
+                    <button class="doc-btn active" data-doc="report">Project Report</button>
+                    <button class="doc-btn" data-doc="variables">Variables We Use</button>
+                    <button class="doc-btn" data-doc="readme">README</button>
+                    <button class="doc-btn" data-doc="updating-actuals">Updating Actuals</button>
+                </div>
+
+                <article class="doc-body" id="doc-body">Loading…</article>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container">
+            <p>Greg Lewis · EMBA 693R Advanced ML · Apr 2026</p>
+            <p class="meta">Pre-computed predictions served from static JSON. No live API calls at request time.</p>
+        </div>
+    </footer>
+
+    <script src="/app.js"></script>
+</body>
+</html>
