@@ -218,60 +218,78 @@ def collect_comparison_importances() -> dict[str, dict]:
 
 
 def retrain_pickled_models() -> dict:
-    """Retrain the 3 regressor/classifier pickles with the current sklearn.
+    """Load pickles from disk; retrain only the ones that fail to deserialize.
 
-    Returns a dict of per-artifact training stats so the UI can show the same
-    metrics (games, win_acc, margin_mae, total_mae) for every comparison model.
+    Also reconciles prob_feature_cols against what's actually in matchup_dataset —
+    teammate's pipeline added features (teamA_home_state_adv, ast_vs_stl_clash_adv)
+    that the engine's compute_matchup_features doesn't produce, so we drop any
+    feature we can't compute at inference time and save a trimmed prob_feature_cols.
     """
     import joblib
     from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
 
     models_dir = DATA_DIR / "models"
     matchups = pd.read_csv(DATA_DIR / "matchup_dataset.csv", low_memory=False)
-
-    # Exclude any 2026 rows that might have leaked in (training data only).
     matchups = matchups[matchups["season"] < 2026].copy()
 
-    score_cols = list(dict.fromkeys(joblib.load(models_dir / "feature_cols.pkl")))  # dedup
-    prob_cols = joblib.load(models_dir / "prob_feature_cols.pkl")
-
-    # Save the deduplicated score_cols back (fixes the duplicate seed_diff in original pkl)
-    joblib.dump(score_cols, models_dir / "feature_cols.pkl")
+    def _try_load(name: str):
+        try:
+            return joblib.load(models_dir / name)
+        except Exception as exc:
+            print(f"    {name}: failed to load ({type(exc).__name__}) — will retrain")
+            return None
 
     # ── Score regressors ─────────────────────────────────────────
+    score_cols = list(dict.fromkeys(joblib.load(models_dir / "feature_cols.pkl")))
+    joblib.dump(score_cols, models_dir / "feature_cols.pkl")
     score_df = matchups.dropna(subset=score_cols + ["score_margin", "total_points"])
     Xs = score_df[score_cols].fillna(0.0).to_numpy()
     y_margin = score_df["score_margin"].to_numpy()
     y_total = score_df["total_points"].to_numpy()
 
-    margin_model = GradientBoostingRegressor(
-        n_estimators=300, max_depth=3, learning_rate=0.05, random_state=42,
-    ).fit(Xs, y_margin)
-    total_model = GradientBoostingRegressor(
-        n_estimators=300, max_depth=3, learning_rate=0.05, random_state=42,
-    ).fit(Xs, y_total)
-    joblib.dump(margin_model, models_dir / "score_margin_model.pkl")
-    joblib.dump(total_model, models_dir / "total_points_model.pkl")
+    margin_model = _try_load("score_margin_model.pkl")
+    if margin_model is None:
+        margin_model = GradientBoostingRegressor(
+            n_estimators=300, max_depth=3, learning_rate=0.05, random_state=42,
+        ).fit(Xs, y_margin)
+        joblib.dump(margin_model, models_dir / "score_margin_model.pkl")
+
+    total_model = _try_load("total_points_model.pkl")
+    if total_model is None:
+        total_model = GradientBoostingRegressor(
+            n_estimators=300, max_depth=3, learning_rate=0.05, random_state=42,
+        ).fit(Xs, y_total)
+        joblib.dump(total_model, models_dir / "total_points_model.pkl")
 
     margin_pred = margin_model.predict(Xs)
     total_pred = total_model.predict(Xs)
     cm_margin_mae = float(np.mean(np.abs(margin_pred - y_margin)))
     cm_total_mae = float(np.mean(np.abs(total_pred - y_total)))
     cm_win_acc = float(((margin_pred >= 0) == (y_margin >= 0)).mean())
-    print(f"    score regressors: trained on {len(score_df):,} games, "
+    print(f"    score regressors: {len(score_df):,} games, "
           f"margin train-MAE={cm_margin_mae:.2f}")
 
     # ── Probability classifier ───────────────────────────────────
+    prob_cols_full = joblib.load(models_dir / "prob_feature_cols.pkl")
+    prob_cols = [c for c in prob_cols_full if c in matchups.columns]
+    dropped = [c for c in prob_cols_full if c not in matchups.columns]
+    if dropped:
+        print(f"    prob cols: dropping {len(dropped)} not in matchup_dataset "
+              f"(not producible by engine.compute_matchup_features): {dropped}")
+        joblib.dump(prob_cols, models_dir / "prob_feature_cols.pkl")
+
     prob_df = matchups.dropna(subset=prob_cols + ["game_result"])
     Xp = prob_df[prob_cols].fillna(0.0).to_numpy()
     yp = prob_df["game_result"].astype(int).to_numpy()
-    clf = GradientBoostingClassifier(
-        n_estimators=300, max_depth=3, learning_rate=0.05, random_state=42,
-    ).fit(Xp, yp)
-    joblib.dump(clf, models_dir / "prob_model.pkl")
+
+    clf = _try_load("prob_model.pkl") if not dropped else None
+    if clf is None:
+        clf = GradientBoostingClassifier(
+            n_estimators=300, max_depth=3, learning_rate=0.05, random_state=42,
+        ).fit(Xp, yp)
+        joblib.dump(clf, models_dir / "prob_model.pkl")
     lgb_train_acc = float((clf.predict(Xp) == yp).mean())
-    print(f"    prob classifier:  trained on {len(prob_df):,} games, "
-          f"train-acc={lgb_train_acc:.1%}")
+    print(f"    prob classifier:  {len(prob_df):,} games, train-acc={lgb_train_acc:.1%}")
 
     return {
         "comparative_metrics": {
