@@ -19,6 +19,9 @@ data/kaggle/MMasseyOrdinals.csv
 # Uploaded actuals temp file
 data/_uploaded_actuals.csv
 
+# prepare_data.py swap-backup of the live season file (restored in finally block)
+data/.season_2026_working_copy.csv
+
 # OS junk
 .DS_Store
 Thumbs.db

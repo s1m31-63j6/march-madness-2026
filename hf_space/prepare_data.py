@@ -149,24 +149,39 @@ def _normalize_importances(pairs: list[tuple[str, float]]) -> list[dict]:
 
 
 def collect_comparison_importances() -> dict[str, dict]:
-    """Extract feature importances from the other trained models for side-by-side UI.
-
-    Returns {model_label: {feature_cols: [...], importances: [{feature, importance}]}}
-    """
+    """Extract feature importances + per-model training stats for side-by-side UI."""
     import joblib
+    import json
 
     models_dir = DATA_DIR / "models"
     out: dict[str, dict] = {}
+    retrain_stats = globals().get("_RETRAIN_STATS", {})
 
     # Greg_v1 — Ridge regression. Use |coef| as importance proxy.
     try:
         greg_model = joblib.load(models_dir / "greg_v1_margin_model.pkl")
         greg_cols = joblib.load(models_dir / "greg_v1_feature_cols.pkl")
         coefs = np.abs(getattr(greg_model, "coef_", np.zeros(len(greg_cols))))
+        greg_stats = {}
+        summary_path = models_dir / "greg_v1_summary.json"
+        if summary_path.exists():
+            s = json.loads(summary_path.read_text())
+            # Greg_v1 was trained on 924 tournament games (2011-2025) with recency
+            # weighting (recent seasons weighted 4x). The `holdout_*` metrics in the
+            # summary are from a cross-validation holdout inside that dataset, not a
+            # year-based split — 2024 and 2025 games are in training, too.
+            greg_stats = {
+                "games": 924,
+                "win_acc": s.get("holdout_win_acc"),
+                "margin_mae": s.get("holdout_margin_mae"),
+                "total_mae": s.get("holdout_total_mae"),
+                "data_note": "2011-2025 tournament games, recency-weighted (recent seasons 4x). Metrics shown are cross-validation holdout.",
+            }
         out["Greg_v1"] = {
             "feature_cols": list(greg_cols),
             "importances": _normalize_importances(list(zip(greg_cols, coefs))),
             "method": "|β| from Ridge regression (normalized)",
+            "stats": greg_stats,
         }
     except Exception as exc:
         print(f"    skipped Greg_v1 importances: {exc}")
@@ -180,6 +195,7 @@ def collect_comparison_importances() -> dict[str, dict]:
             "feature_cols": list(cm_cols),
             "importances": _normalize_importances(list(zip(cm_cols, imp))),
             "method": "gradient-boosting gain on score-margin (normalized)",
+            "stats": retrain_stats.get("comparative_metrics", {}),
         }
     except Exception as exc:
         print(f"    skipped Comparative Metrics importances: {exc}")
@@ -193,6 +209,7 @@ def collect_comparison_importances() -> dict[str, dict]:
             "feature_cols": list(prob_cols),
             "importances": _normalize_importances(list(zip(prob_cols, imp))),
             "method": "gradient-boosting gain on win classifier (normalized)",
+            "stats": retrain_stats.get("lean_gb", {}),
         }
     except Exception as exc:
         print(f"    skipped Lean GB importances: {exc}")
@@ -200,13 +217,11 @@ def collect_comparison_importances() -> dict[str, dict]:
     return out
 
 
-def retrain_pickled_models() -> None:
+def retrain_pickled_models() -> dict:
     """Retrain the 3 regressor/classifier pickles with the current sklearn.
 
-    The original pkls were saved by older-sklearn / newer-numpy combinations that
-    don't deserialize here (CyHalfSquaredError, PCG64 drift). We train fresh on
-    the same matchup_dataset.csv the notebook used, keeping the same feature
-    column lists so the existing model wrappers pick them up unchanged.
+    Returns a dict of per-artifact training stats so the UI can show the same
+    metrics (games, win_acc, margin_mae, total_mae) for every comparison model.
     """
     import joblib
     from sklearn.ensemble import GradientBoostingClassifier, GradientBoostingRegressor
@@ -237,8 +252,14 @@ def retrain_pickled_models() -> None:
     ).fit(Xs, y_total)
     joblib.dump(margin_model, models_dir / "score_margin_model.pkl")
     joblib.dump(total_model, models_dir / "total_points_model.pkl")
+
+    margin_pred = margin_model.predict(Xs)
+    total_pred = total_model.predict(Xs)
+    cm_margin_mae = float(np.mean(np.abs(margin_pred - y_margin)))
+    cm_total_mae = float(np.mean(np.abs(total_pred - y_total)))
+    cm_win_acc = float(((margin_pred >= 0) == (y_margin >= 0)).mean())
     print(f"    score regressors: trained on {len(score_df):,} games, "
-          f"margin train-MAE={np.mean(np.abs(margin_model.predict(Xs) - y_margin)):.2f}")
+          f"margin train-MAE={cm_margin_mae:.2f}")
 
     # ── Probability classifier ───────────────────────────────────
     prob_df = matchups.dropna(subset=prob_cols + ["game_result"])
@@ -248,8 +269,26 @@ def retrain_pickled_models() -> None:
         n_estimators=300, max_depth=3, learning_rate=0.05, random_state=42,
     ).fit(Xp, yp)
     joblib.dump(clf, models_dir / "prob_model.pkl")
+    lgb_train_acc = float((clf.predict(Xp) == yp).mean())
     print(f"    prob classifier:  trained on {len(prob_df):,} games, "
-          f"train-acc={(clf.predict(Xp) == yp).mean():.1%}")
+          f"train-acc={lgb_train_acc:.1%}")
+
+    return {
+        "comparative_metrics": {
+            "games": len(score_df),
+            "win_acc": cm_win_acc,
+            "margin_mae": cm_margin_mae,
+            "total_mae": cm_total_mae,
+            "data_note": "Training set (2008-2025 tournament games, excludes 2026).",
+        },
+        "lean_gb": {
+            "games": len(prob_df),
+            "win_acc": lgb_train_acc,
+            "margin_mae": None,
+            "total_mae": None,
+            "data_note": "Classifier — predicts P(win), not scores. Training set.",
+        },
+    }
 
 
 def build_models(db: TeamDB) -> dict:
@@ -662,12 +701,58 @@ def build_docs():
 # Main
 # ---------------------------------------------------------------------------
 
+def _use_pre_tournament_snapshot() -> Path | None:
+    """Swap the frozen pre-tournament season file into place.
+
+    Without this, ``TeamDB`` loads whatever is currently in ``data/season_2026.csv``,
+    which at some point got refreshed with post-tournament Barttorvik stats (record,
+    adj_em, wab all reflect tournament wins). Using post-tournament features to
+    "predict" tournament outcomes is circular — each tournament win already inflates
+    the feature values we're feeding the model.
+
+    Returns a path to the working-copy backup so ``main`` can restore it after.
+    """
+    import shutil
+
+    pre = DATA_DIR / "season_2026_pre_tournament.csv"
+    live = DATA_DIR / "season_2026.csv"
+    if not pre.exists() or not live.exists():
+        print("  no pre-tournament snapshot found; using live season file as-is")
+        return None
+
+    backup = DATA_DIR / ".season_2026_working_copy.csv"
+    shutil.copy(live, backup)
+    shutil.copy(pre, live)
+    print(f"  swapped in pre-tournament snapshot; working copy → {backup.name}")
+    return backup
+
+
+def _restore_working_copy(backup: Path | None) -> None:
+    if backup is None or not backup.exists():
+        return
+    import shutil
+
+    shutil.copy(backup, DATA_DIR / "season_2026.csv")
+    backup.unlink()
+
+
 def main():
     print("Preparing March Madness 2026 retrospective data …")
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    print("[pre] freezing pre-tournament feature snapshot")
+    backup = _use_pre_tournament_snapshot()
+
+    try:
+        _main_body()
+    finally:
+        _restore_working_copy(backup)
+
+
+def _main_body():
     print("[0/6] retraining pickled models with current sklearn")
-    retrain_pickled_models()
+    retrain_stats = retrain_pickled_models()
+    globals()["_RETRAIN_STATS"] = retrain_stats
 
     print("[1/6] loading engine & seeds")
     db = TeamDB(str(DATA_DIR))
