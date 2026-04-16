@@ -675,11 +675,8 @@ def build_docs():
         (DOCS_OUT_DIR / "readme.md").write_text(readme.read_text())
         print("    wrote docs/readme.md")
 
-    # UPDATING_ACTUALS.md
-    ua = REPO_ROOT / "UPDATING_ACTUALS.md"
-    if ua.exists():
-        (DOCS_OUT_DIR / "updating-actuals.md").write_text(ua.read_text())
-        print("    wrote docs/updating-actuals.md")
+    # UPDATING_ACTUALS.md is intentionally not published — the tournament is over
+    # and the retrospective doesn't need a "how to enter results" guide.
 
     # March Madness Report.docx → .md (extract images to web/public/media/)
     docx_path = REPO_ROOT / "March Madness Report.docx"
