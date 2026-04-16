@@ -1,7 +1,7 @@
 option,total_pts,correct,R64,R32,S16,E8,FF,CH
-D (Surgical),1350,47,27,10,6,2,1,1
-C (MC Consensus),1060,48,26,14,5,2,1,0
-B (Threshold),1040,47,26,13,5,2,1,0
-F (Risk Budget),1000,45,26,11,5,2,1,0
-E (EV Maximized),970,45,27,11,4,2,1,0
+D (Surgical),1070,49,29,11,6,2,1,0
+B (Threshold),1010,45,25,12,5,2,1,0
+E (EV Maximized),1010,48,29,12,4,2,1,0
+C (MC Consensus),970,42,23,11,5,2,1,0
+F (Risk Budget),970,42,23,11,5,2,1,0
 A (Sampled),960,44,26,11,4,2,1,0
